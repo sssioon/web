@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网页编辑器主页</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <h1>输入需要编辑的网页网址</h1>
+        <div class="input-container">
+            <input type="text" id="urlInput" placeholder="请输入网址">
+            <button id="editButton">开始编辑</button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('editButton').addEventListener('click', () => {
+            const url = document.getElementById('urlInput').value.trim();
+            if (url) {
+                window.location.href = `/editor.html?url=${encodeURIComponent(url)}`;
+            } else {
+                alert('请输入网址');
+            }
+        });
+    </script>
+</body>
+</html>
