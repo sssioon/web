@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网页编辑器</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* 根布局 */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+            overflow: auto; /* 确保页面本身有滚动条 */
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* 固定头部 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: #f0f0f0;
+            border-bottom: 1px solid #ccc;
+            position: relative;
+            z-index: 10;
+        }
+
+        button {
+            padding: 10px 15px;
+            margin: 0 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .history-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .history-list {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            min-width: 450px; /* 设置更宽的最小宽度 */
+            max-width: 500px; /* 设置更宽的最大宽度 */
+            max-height: 500px; /* 限制历史记录列表的高度 */
+            overflow-y: auto;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 1;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .history-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #f1f1f1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .delete-button {
+            margin-left: 10px;
+            background-color: red;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .delete-button:hover {
+            background-color: darkred;
+        }
+
+        .history-list.show {
+            display: block;
+        }
+
+        /* 编辑区域自动填充 */
+        .editable-area {
+            flex: 1;
+            width: 100%;
+            overflow-y: auto; /* 使编辑区域可滚动 */
+            padding: 20px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <button id="backButton">返回</button>
+            <button id="editButton">编辑</button>
+            <button id="saveButton">保存内容</button>
+            <div class="history-dropdown">
+                <button id="historyButton">历史记录</button>
+                <div class="history-list" id="historyList"></div>
+            </div>
+        </div>
+        <div id="editableContent" class="editable-area" contenteditable="true"></div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const url = urlParams.get('url');
+        const historyKey = 'editHistory';
+
+        if (!url) {
+            alert('未提供网址');
+            window.history.back();
+        }
+
+        function convertRelativePathsToAbsolute(html, baseUrl) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const base = new URL(baseUrl);
+
+            doc.querySelectorAll('img').forEach(img => {
+                const src = img.getAttribute('src');
+                if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+                    img.src = new URL(src, base).href;
+                }
+            });
+
+            doc.querySelectorAll('link').forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && !href.startsWith('http') && !href.startsWith('data:')) {
+                    link.href = new URL(href, base).href;
+                }
+            });
+
+            return doc.documentElement.innerHTML;
+        }
+
+        fetch(`/proxy?url=${encodeURIComponent(url)}`)
+            .then(response => {
+                if (!response.ok) throw new Error('网络错误');
+                return response.text();
+            })
+            .then(html => {
+                const updatedHtml = convertRelativePathsToAbsolute(html, url);
+                document.getElementById('editableContent').innerHTML = updatedHtml;
+
+                const stylesheets = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+                stylesheets.forEach(link => {
+                    const clonedLink = document.createElement('link');
+                    clonedLink.rel = 'stylesheet';
+                    clonedLink.href = link.href;
+                    document.head.appendChild(clonedLink);
+                });
+            })
+            .catch(err => {
+                console.error('获取网页内容失败:', err);
+                alert('无法加载该网页，请检查网址。');
+            });
+
+        document.getElementById('saveButton').addEventListener('click', () => {
+            const content = document.getElementById('editableContent').innerHTML;
+            const timestamp = new Date().toLocaleString();
+            const name = prompt('请输入保存内容的名称:', `内容 - ${timestamp}`) || `内容 - ${timestamp}`;
+            let history = JSON.parse(localStorage.getItem(historyKey)) || [];
+
+            if (history.length >= 50) {
+                history.shift();
+            }
+            history.push({ name, timestamp, content });
+            localStorage.setItem(historyKey, JSON.stringify(history));
+
+            document.getElementById('editableContent').contentEditable = "false";
+            document.getElementById('saveButton').disabled = true;
+            alert('内容已保存到历史记录！');
+
+            loadHistory();
+        });
+
+        document.getElementById('editButton').addEventListener('click', () => {
+            document.getElementById('editableContent').contentEditable = "true";
+            document.getElementById('saveButton').disabled = false;
+            alert('您现在可以编辑内容！');
+        });
+
+        document.getElementById('backButton').addEventListener('click', () => {
+            window.history.back();
+        });
+
+        function loadHistory() {
+            let history = JSON.parse(localStorage.getItem(historyKey)) || [];
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = '';
+
+            history.forEach((item, index) => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                historyItem.innerHTML = `
+                    ${item.name} - ${item.timestamp}
+                    <button class="delete-button" onclick="deleteHistory(event, ${index})">删除</button>
+                `;
+                historyItem.addEventListener('click', () => {
+                    restoreContent(item.content);
+                });
+                historyList.appendChild(historyItem);
+            });
+        }
+
+        function restoreContent(content) {
+            document.getElementById('editableContent').innerHTML = content;
+            document.getElementById('editableContent').contentEditable = "true";
+            document.getElementById('saveButton').disabled = false;
+            document.getElementById('historyList').classList.remove('show');
+            alert('内容已恢复，您可以继续编辑！');
+        }
+
+        function deleteHistory(event, index) {
+            event.stopPropagation();
+            let history = JSON.parse(localStorage.getItem(historyKey)) || [];
+            history.splice(index, 1);
+            localStorage.setItem(historyKey, JSON.stringify(history));
+            loadHistory();
+        }
+
+        document.getElementById('historyButton').addEventListener('click', () => {
+            const historyList = document.getElementById('historyList');
+            historyList.classList.toggle('show');
+            loadHistory();
+        });
+    </script>
+</body>
+</html>
